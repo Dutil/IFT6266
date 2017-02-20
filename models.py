@@ -21,7 +21,7 @@ def build_basic_mlp(input_var=None, nb_layer=1, num_units=800, nonlinearity=lasa
     network = lasagne.layers.Upscale2DLayer(network, 2)
     return network
 
-def build_basic_cnn(input_var=None, num_units=32, encoder_size=100):
+def build_basic_cnn(input_var=None, num_units=32, encoder_size=800):
 
     print "We have {} hidden units".format(num_units)
 
@@ -44,16 +44,22 @@ def build_basic_cnn(input_var=None, num_units=32, encoder_size=100):
     network = lasagne.layers.MaxPool2DLayer(network, pool_size=(2, 2))
     
     # hidden units
-    network = lasagne.layers.FlattenLayer(network)
-    network = lasagne.layers.DenseLayer(network, encoder_size)
-    network = lasagne.layers.DenseLayer(network, num_units*6*6)
-    network = lasagne.layers.ReshapeLayer(network, (input_var.shape[0], num_units, 6, 6))
+    #network = lasagne.layers.FlattenLayer(network)
+
+    #network = lasagne.layers.DenseLayer(network, encoder_size)
+    #network = lasagne.layers.DenseLayer(network, num_units*6*6)
+    #network = lasagne.layers.ReshapeLayer(network, (input_var.shape[0], num_units, 6, 6))
+    #network = lasagne.layers.MaxPool2DLayer(network, pool_size=(2, 2))
+    network = lasagne.layers.Conv2DLayer( network, num_filters=encoder_size, filter_size=(6, 6))
+    #network = lasagne.layers.Conv2DLayer(network, num_filters=encoder_size, filter_size=(1, 1))
 
     # Deconv
+    #network = lasagne.layers.Upscale2DLayer(network, 2)
+    network = lasagne.layers.TransposedConv2DLayer(network, num_filters=num_units, filter_size=(5,5))
     network = lasagne.layers.Upscale2DLayer(network, 2)
-    network = lasagne.layers.TransposedConv2DLayer(network, num_filters=num_units, filter_size=(3,3))
+    network = lasagne.layers.TransposedConv2DLayer(network, num_filters=3, filter_size=(5, 5), nonlinearity=None)
     network = lasagne.layers.Upscale2DLayer(network, 2)
-    #network = lasagne.layers.TransposedConv2DLayer(network, num_filters=3, filter_size=(3, 3), nonlinearity=None)
+    network = lasagne.layers.TransposedConv2DLayer(network, num_filters=3, filter_size=(5, 5), nonlinearity=None)
     #network = lasagne.layers.TransposedConv2DLayer(network, num_filters=3, filter_size=(8, 8), stride=(2, 2))
 
     return network
