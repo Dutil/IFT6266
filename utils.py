@@ -6,6 +6,7 @@ import numpy as np
 import lasagne
 import theano
 from theano import tensor as T
+import pickle as pkl
 
 
 def generate_and_show_sample(fn, nb=1, random=True):
@@ -65,20 +66,16 @@ def show_sample(xs, ys, preds, nb=1):
         plt.subplot(2, nb, nb+i+1)
         plt.imshow(img_pred)
 
-    #plt.ion()
     plt.show()
 
 
-    # Optionally, you could now dump the network weights to a file like this:
-    # np.savez('model.npz', *lasagne.layers.get_all_param_values(network))
-    #
-    # And load them again later on like this:
-    # with np.load('model.npz') as f:
-    #     param_values = [f['arr_%d' % i] for i in range(len(f.files))]
-    # lasagne.layers.set_all_param_values(network, param_values)
 
-def save_model(network, file_name):
+def save_model(network, options, file_name):
     np.savez(file_name, *lasagne.layers.get_all_param_values(network))
+    option_file = file_name + '.pkl'
+    pkl.dump(options, open(option_file, 'w'))
+
+
 
 def load_model(network, file_name):
     with np.load(file_name) as f:

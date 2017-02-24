@@ -8,6 +8,7 @@ import theano.tensor as T
 import utils
 import lasagne
 import iterator
+import pickle as pkl
 
 
 # ################## Download and prepare the MNIST dataset ##################
@@ -33,8 +34,8 @@ def train(network_fn, num_epochs=20,
           model_file="models/testing123.npz",
           reload=False,
           **kwargs):
+
     # Load the dataset
-    print save_freq
     print "Loading data..."
     train_iter, val_iter = load_dataset(batch_size)
 
@@ -48,6 +49,11 @@ def train(network_fn, num_epochs=20,
 
     input_var = input.transpose((0, 3, 1, 2))
     target_var = target.dimshuffle((0, 3, 1, 2))
+
+    # Reloading
+    if reload:
+        options = pkl.load(open(model_file+'.pkl'))
+        kwargs = options
 
     network = network_fn(input_var, **kwargs)
     if reload:
@@ -96,13 +102,12 @@ def train(network_fn, num_epochs=20,
             # Generate
             if (i+1) % verbose_freq == 0.:
                 utils.generate_and_show_sample(val_fn, nb=sample)
-                #utils.show_sample(inputs, targets, pred, nb=sample)
                 print "batch {} of epoch {} of {} took {:.3f}s".format(i, epoch + 1, num_epochs, time.time() - start_time)
                 print "  training loss:\t\t{:.6f}".format(train_err / train_batches)
 
             if (i+1) % save_freq == 0:
                 print "saving the model"
-                utils.save_model(network, model_file)
+                utils.save_model(network, kwargs, model_file)
 
         train_loss.append(train_err)
 
