@@ -17,7 +17,7 @@ import pickle as pkl
 
 def load_dataset(batch_size=128):
 
-    train_iter = iterator.Iterator(batch_size=batch_size, extract_center=True)
+    train_iter = iterator.PreprocessIterator(batch_size=batch_size, extract_center=True)
     val_iter = iterator.Iterator(nb_sub=2000, batch_size=batch_size, img_path = 'val2014', extract_center=True)
 
     return train_iter, val_iter
