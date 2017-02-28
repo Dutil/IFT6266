@@ -9,11 +9,12 @@ from theano import tensor as T
 import pickle as pkl
 
 
-def generate_and_show_sample(fn, nb=1, random=True):
+def generate_and_show_sample(fn, nb=1, seed=1993):
 
     it = Iterator(img_path="val2014")
     choice = range(len(it))
-    if random == True:
+    if seed > 0:
+        np.random.seed(seed)
         np.random.shuffle(choice)
 
     choice = choice[:nb]

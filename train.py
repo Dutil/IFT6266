@@ -28,7 +28,7 @@ def load_dataset(batch_size=128):
 # more functions to better separate the code, but it wouldn't make it any
 # easier to read.
 
-def train(network_fn, num_epochs=20,
+def train(network_cl, num_epochs=20,
           lr=0.001, sample=3, save_freq=100,
           batch_size=128, verbose_freq=100,
           model_file="models/testing123.npz",
@@ -55,22 +55,20 @@ def train(network_fn, num_epochs=20,
         options = pkl.load(open(model_file+'.pkl'))
         kwargs = options
 
+
+    network_fn = network_cl.build_network()
     network = network_fn(input_var, **kwargs)
     if reload:
         print "reloading {}...".format(model_file)
         network = utils.load_model(network, model_file)
 
     prediction = lasagne.layers.get_output(network)
-    loss = lasagne.objectives.squared_error(prediction, target_var)
-    loss = loss.mean()
+    loss = network_cl.get_loss(prediction, target_var)
 
     params = lasagne.layers.get_all_params(network, trainable=True)
     updates = lasagne.updates.adam(
             loss, params, learning_rate=lr)
 
-    # Create a loss expression for validation/testing. The crucial difference
-    # here is that we do a deterministic forward pass through the network,
-    # disabling dropout layers.
     test_prediction = lasagne.layers.get_output(network, deterministic=True)
     test_loss = lasagne.objectives.squared_error(test_prediction, target_var)
     test_loss = test_loss.mean()
@@ -101,7 +99,7 @@ def train(network_fn, num_epochs=20,
 
             # Generate
             if (i+1) % verbose_freq == 0.:
-                utils.generate_and_show_sample(val_fn, nb=sample)
+                utils.generate_and_show_sample(val_fn, nb=sample, seed=i)
                 print "batch {} of epoch {} of {} took {:.3f}s".format(i, epoch + 1, num_epochs, time.time() - start_time)
                 print "  training loss:\t\t{:.6f}".format(train_err / train_batches)
 
