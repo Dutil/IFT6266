@@ -9,9 +9,11 @@ from theano import tensor as T
 import pickle as pkl
 
 
-def generate_and_show_sample(fn, nb=1, seed=1993):
+def generate_and_show_sample(fn, nb=1, seed=1993, it=None, verbose=True, n_split=1):
 
-    it = Iterator(img_path="val2014")
+    if it is None:
+        it = Iterator(img_path="val2014", load_caption=True, process_text=True)
+
     choice = range(len(it))
     if seed > 0:
         np.random.seed(seed)
@@ -21,11 +23,19 @@ def generate_and_show_sample(fn, nb=1, seed=1993):
 
     try:
         xs, ys, cs = zip(*[it[i] for i in choice])
-        loss, preds = fn(xs, ys)
+        loss, preds = fn(xs, ys, cs)
 
-        show_sample(xs, ys, preds, nb)
-    except:
+        for pl in np.array_split(np.arange(nb), n_split):
+                show_sample([xs[i] for i in pl], [ys[i] for i in pl], [preds[i] for i in pl], len(pl))
+    except Exception as e:
+        print e
         print "Oups!"
+
+    if verbose:
+        for img in cs:
+            sentence = [it.mapping[idx] for idx in img[0]]
+            print ' '.join(sentence)
+            print ""
         
 def get_theano_generative_func(network_path, network_fn):
 
