@@ -29,13 +29,14 @@ class GAN(models.Model):
     def build_generator(self, input_var=None):
         num_units = self.options['generator_num_units']
         encoder_size = self.options['generator_encoder_size']
+        noise_size = self.options['noise_size']
 
         print "We have {} hidden units".format(num_units)
 
-        network = lasagne.layers.InputLayer(shape=(None, 100),
+        network = lasagne.layers.InputLayer(shape=(None, noise_size),
                                             input_var=input_var)
 
-        network = lasagne.layers.ReshapeLayer(network, (-1, 100, 1, 1))
+        network = lasagne.layers.ReshapeLayer(network, (-1, noise_size, 1, 1))
         network = lasagne.layers.BatchNormLayer(network)
         network = lasagne.layers.TransposedConv2DLayer(network, num_filters=num_units, filter_size=(4, 4),
                                                        stride=(1, 1))
@@ -91,7 +92,7 @@ class GAN(models.Model):
         return network
 
     def build_network(self):
-       return self.build_generator, self.build_discriminator
+        return self.build_generator, self.build_discriminator
 
     def get_loss(self, disc_real, disc_sample):
 
@@ -100,6 +101,12 @@ class GAN(models.Model):
         generator_loss = -T.log(disc_sample).mean()
 
         return discriminator_loss, generator_loss
+    
+    def _get_sample(self, input_vars):
+        return lasagne.layers.get_output(self.generator, *input_vars)
+    
+    def _get_disc_score(self, sample, inputs_var):
+        return lasagne.layers.get_output(self.discriminator, sample)
 
     def compile_theano_func(self, lr):
         # Prepare Theano variables for inputs and targets
@@ -109,11 +116,11 @@ class GAN(models.Model):
         real_img = origin_real_img.dimshuffle((0, 3, 1, 2))
 
         # Generator
-        sample = lasagne.layers.get_output(self.generator, *input_vars)
+        sample = self._get_sample(input_vars)
 
         #Discriminator
-        disc_real = lasagne.layers.get_output(self.discriminator, real_img)
-        disc_sample = lasagne.layers.get_output(self.discriminator, sample)
+        disc_real = self._get_disc_score(real_img, input_vars)
+        disc_sample = self._get_disc_score(sample, input_vars)
 
         # Our loss
         discriminator_loss, generator_loss = self.get_loss(disc_real, disc_sample)
@@ -155,7 +162,8 @@ class GAN(models.Model):
     def train(self, imgs, target, caps):
 
         #TODO: train discriminator then generator
-        noise = np.random.normal(size=(len(imgs), 100))
+        noise_size = self.options['noise_size']
+        noise = np.random.normal(size=(len(imgs), noise_size))
 
         [disc_loss] = self.train_discriminator_fn(noise, target)
         self.schedule = (self.schedule+1) % 10
@@ -167,9 +175,13 @@ class GAN(models.Model):
         #return [disc_loss, gen_loss]
 
     def get_generation_fn(self):
+        
+        noise_size = self.options['noise_size']
+        
         def val_fn(imgs, target, caps):
-            #noise = np.random.normal(size=(len(imgs), 100))
-            noise = np.random.uniform(size=(len(imgs), 100))
+            
+            #noise = np.random.normal(size=(len(imgs), noise_size))
+            noise = np.random.uniform(size=(len(imgs), noise_size))
             res = self.generate_sample_fn(noise)
 
             #from IPython.core.debugger import Tracer
@@ -184,35 +196,39 @@ class GAN(models.Model):
 class BICGAN(GAN):
         #Under cosntruction
     
-        def build_generator(self, input_var=None):
+    def build_generator(self, contour=None, noise=None):
         num_units = self.options['generator_num_units']
         encoder_size = self.options['generator_encoder_size']
+        noise_size = self.options['noise_size']
 
         print "We have {} hidden units".format(num_units)
         
         #Our encoder
-        encoder = lasagne.layers.InputLayer(shape=(None, 3, 64, 64),
-                                            input_var=input_var)
+        self._contour_input = lasagne.layers.InputLayer(shape=(None, 3, 64, 64),
+                                            input_var=contour)
         
-        encoder = lasagne.layers.BatchNormLayer(network)
-        encoder = lasagne.layers.Conv2DLayer(network, num_filters=num_units/4, filter_size=(5, 5),
-                                             stride=2, pad=2, nonlinearity=lrelu)
-        encoder = lasagne.layers.BatchNormLayer(network)
+        encoder = lasagne.layers.BatchNormLayer(self._contour_input)
+        encoder = lasagne.layers.Conv2DLayer(encoder, num_filters=num_units/4, filter_size=(5, 5),
+                                             stride=2, pad=2)
+        encoder = lasagne.layers.BatchNormLayer(encoder)
 
-        encoder = lasagne.layers.Conv2DLayer(network, num_filters=num_units/2, filter_size=(5, 5),
-                                             stride=2, pad=2, nonlinearity=lrelu)
-        encoder = lasagne.layers.BatchNormLayer(network)
+        encoder = lasagne.layers.Conv2DLayer(encoder, num_filters=num_units/2, filter_size=(5, 5),
+                                             stride=2, pad=2)
+        encoder = lasagne.layers.BatchNormLayer(encoder)
 
-        encoder = lasagne.layers.Conv2DLayer(network, num_filters=num_units, filter_size=(5, 5),
-                                             stride=2, pad=2, nonlinearity=lrelu)
-        encoder = lasagne.layers.BatchNormLayer(network)
-        encoder = lasagne.layers.FlattenLayer(network)
+        encoder = lasagne.layers.Conv2DLayer(encoder, num_filters=num_units, filter_size=(5, 5),
+                                             stride=2, pad=2)
+        encoder = lasagne.layers.BatchNormLayer(encoder)
+        encoder = lasagne.layers.FlattenLayer(encoder)
         
 
-        network = lasagne.layers.InputLayer(shape=(None, 100),
-                                            input_var=input_var)
+        self._noise_input = lasagne.layers.InputLayer(shape=(None, noise_size),
+                                            input_var=noise)
+        
+        # Merging the encoder and the noise.
+        network = lasagne.layers.ConcatLayer([self._noise_input, encoder])
 
-        network = lasagne.layers.ReshapeLayer(network, (-1, 100, 1, 1))
+        network = lasagne.layers.ReshapeLayer(network, (-1, noise_size + num_units*8*8, 1, 1))
         network = lasagne.layers.BatchNormLayer(network)
         network = lasagne.layers.TransposedConv2DLayer(network, num_filters=num_units, filter_size=(4, 4),
                                                        stride=(1, 1))
@@ -239,8 +255,14 @@ class BICGAN(GAN):
 
         print "We have {} hidden units".format(num_units)
 
-        network = lasagne.layers.InputLayer(shape=(None, 3, 32, 32),
+        network = lasagne.layers.InputLayer(shape=(None, 3, 64, 64),
                                             input_var=input_var)
+        
+        #We have one aditionnal layer.
+        
+        network = lasagne.layers.Conv2DLayer(network, num_filters=num_units/8, filter_size=(5, 5),
+                                             stride=2, pad=2, nonlinearity=lrelu)
+        network = lasagne.layers.BatchNormLayer(network)
 
         network = lasagne.layers.Conv2DLayer(network, num_filters=num_units/4, filter_size=(5, 5),
                                              stride=2, pad=2, nonlinearity=lrelu)
@@ -260,5 +282,51 @@ class BICGAN(GAN):
                                              nonlinearity=lasagne.nonlinearities.sigmoid)
 
         return network
+    
+    def _get_sample(self, input_vars):
+        return lasagne.layers.get_output(self.generator,
+                                             {self._noise_input:input_vars[0], self._contour_input:input_vars[1]})
+    
+    def _get_disc_score(self, sample, inputs_var):
+        
+        # We set the middle
+        contour = inputs_var[1] 
+        center = (contour.shape[2] / 2, contour.shape[3] / 2)
+        
+        contour = T.set_subtensor(contour[:, :, center[0] - 16:center[0] + 16, center[1] - 16:center[1] + 16],  sample)
+        
+        return lasagne.layers.get_output(self.discriminator, contour)
+    
+    def _get_inputs(self):
 
+        noise = T.matrix('noise')
+        contour = T.tensor4('contour')
+        
+        contour_var = contour.transpose((0, 3, 1, 2))
+        return [noise, contour], [noise, contour_var]
+    
+    def train(self, imgs, target, caps):
+
+        noise_size = self.options['noise_size']
+        noise = np.random.uniform(size=(len(imgs), noise_size))
+
+        [disc_loss] = self.train_discriminator_fn(noise, imgs, target)
+        [gen_loss] = self.train_generator_fn(noise, imgs)
+
+        return gen_loss, disc_loss
+        #return [disc_loss, gen_loss]
+
+    def get_generation_fn(self):
+        
+        noise_size = self.options['noise_size']
+        
+        def val_fn(imgs, target, caps):
+            
+            noise = np.random.uniform(size=(len(imgs), noise_size))
+            res = self.generate_sample_fn(noise, imgs)
+
+            return 0, res[0]
+
+        return val_fn
+    
     
