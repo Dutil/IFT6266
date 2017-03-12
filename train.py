@@ -21,9 +21,13 @@ def load_dataset(batch_size=128, load_caption=False):
     val_iter = iterator.Iterator(nb_sub=2000, batch_size=batch_size, img_path = 'val2014', extract_center=True, load_caption=load_caption)
 
     #val_iter.caption_dict = train_iter.caption_dict
-    val_iter.vocab = train_iter.vocab
-    val_iter.mapping = train_iter.mapping
-    val_iter.process_captions()
+
+    try:
+        val_iter.vocab = train_iter.vocab
+        val_iter.mapping = train_iter.mapping
+        val_iter.process_captions()
+    except:
+        pass
 
     return train_iter, val_iter
 
@@ -70,16 +74,17 @@ def train(network_cl, num_epochs=20,
         start_time = time.time()
         for i, batch in enumerate(train_iter):
             inputs, targets, caps = batch
-            train_err_tmp, pred = my_model.train(inputs, targets, caps)
-            train_err += train_err_tmp
+            losses = my_model.train(inputs, targets, caps)
+            #train_err += train_err_tmp
             train_batches += 1
 
 
             # Generate
             if (i+1) % verbose_freq == 0.:
-                utils.generate_and_show_sample(my_model.get_generation_fn(), nb=sample, seed=-1, it=train_iter)
+                utils.generate_and_show_sample(my_model.get_generation_fn(), nb=sample, seed=-1, it=train_iter, n_split=2)
                 print "batch {} of epoch {} of {} took {:.3f}s".format(i, epoch + 1, num_epochs, time.time() - start_time)
-                print "  training loss:\t\t{:.6f}".format(train_err / train_batches)
+                #print "  training loss:\t\t{:.6f}".format(train_err / train_batches)
+                print "losses:", losses
 
             if (i+1) % save_freq == 0:
                 print "saving the model"

@@ -21,22 +21,25 @@ def generate_and_show_sample(fn, nb=1, seed=1993, it=None, verbose=True, n_split
 
     choice = choice[:nb]
 
+    #try:
+    xs, ys, cs = zip(*[it[i] for i in choice])
+    loss, preds = fn(xs, ys, cs)
+
+    for pl in np.array_split(np.arange(nb), n_split):
+            show_sample([xs[i] for i in pl], [ys[i] for i in pl], [preds[i] for i in pl], len(pl))
+    #except Exception as e:
+    #    print e
+    #    print "Oups!"
+
     try:
-        xs, ys, cs = zip(*[it[i] for i in choice])
-        loss, preds = fn(xs, ys, cs)
+        if verbose and it.mapping is not None:
+            for img in cs:
+                sentence = [it.mapping[idx] for idx in img[0]]
+                print ' '.join(sentence)
+                print ""
+    except AttributeError:
+        pass
 
-        for pl in np.array_split(np.arange(nb), n_split):
-                show_sample([xs[i] for i in pl], [ys[i] for i in pl], [preds[i] for i in pl], len(pl))
-    except Exception as e:
-        print e
-        print "Oups!"
-
-    if verbose:
-        for img in cs:
-            sentence = [it.mapping[idx] for idx in img[0]]
-            print ' '.join(sentence)
-            print ""
-        
 def get_theano_generative_func(network_path, network_fn):
 
 
