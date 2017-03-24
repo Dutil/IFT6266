@@ -81,14 +81,14 @@ def train(network_cl, num_epochs=20,
 
             # Generate
             if (i+1) % verbose_freq == 0.:
-                utils.generate_and_show_sample(my_model.get_generation_fn(), nb=sample, seed=-1, it=train_iter, n_split=2)
+                utils.generate_and_show_sample(my_model.get_generation_fn(), nb=sample, seed=i, it=val_iter, n_split=2)
                 print "batch {} of epoch {} of {} took {:.3f}s".format(i, epoch + 1, num_epochs, time.time() - start_time)
                 #print "  training loss:\t\t{:.6f}".format(train_err / train_batches)
                 print "losses:", losses
 
             if (i+1) % save_freq == 0:
                 print "saving the model"
-                utils.save_model(my_model.network, kwargs, model_file)
+                my_model.save(model_file)
 
         train_loss.append(train_err)
 
