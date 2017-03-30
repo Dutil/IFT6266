@@ -23,9 +23,12 @@ class GAN(models.Model):
         self.discriminator = discriminator_fn()
 
     def reload(self, model_file):
+        
+        print "reloading..."
 
-
-
+        self.options = pkl.load(open(model_file + '.pkl'))
+        self.initialise()
+        
         # Reloading the generator
         with np.load(model_file + "_generator.npy.npz") as f:
             param_values = [f['arr_%d' % i] for i in range(len(f.files))]
@@ -35,9 +38,6 @@ class GAN(models.Model):
         with np.load(model_file + "_discriminator.npy.npz") as f:
             param_values = [f['arr_%d' % i] for i in range(len(f.files))]
             lasagne.layers.set_all_param_values(self.discriminator, param_values)
-
-        self.options = pkl.load(open(model_file + '.pkl'))
-
 
 
     def save(self, model_file):
@@ -57,29 +57,21 @@ class GAN(models.Model):
                                             input_var=input_var)
 
         network = lasagne.layers.ReshapeLayer(network, (-1, noise_size, 1, 1))
-        network = lasagne.layers.BatchNormLayer(network)
-        network = lasagne.layers.TransposedConv2DLayer(network, num_filters=num_units, filter_size=(4, 4),
-                                                       stride=(1, 1))
 
-        network = lasagne.layers.BatchNormLayer(network)
-        network = lasagne.layers.TransposedConv2DLayer(network, num_filters=num_units/2,
-                                                       filter_size=(5, 5), stride=(2, 2), crop=1)
+        network = lasagne.layers.batch_norm(lasagne.layers.TransposedConv2DLayer(network, num_filters=num_units, filter_size=(4, 4),
+                                                       stride=(1, 1)))
 
-        network = lasagne.layers.BatchNormLayer(network)
-        network = lasagne.layers.TransposedConv2DLayer(network, num_filters=num_units/4,
-                                                       filter_size=(5, 5), stride=(2, 2), crop=2)
+        network = lasagne.layers.batch_norm(lasagne.layers.TransposedConv2DLayer(network, num_filters=num_units/2,
+                                                       filter_size=(5, 5), stride=(2, 2), crop=2, output_size=8))
 
-        #network = lasagne.layers.BatchNormLayer(network)
+        network = lasagne.layers.batch_norm(lasagne.layers.TransposedConv2DLayer(network, num_filters=num_units/4,
+                                                       filter_size=(5, 5), stride=(2, 2), crop=2, output_size=16))
+
         network = lasagne.layers.TransposedConv2DLayer(network, num_filters=3,
-                                                       filter_size=(4, 4), stride=(2, 2), crop=2,
-                                                       nonlinearity=lasagne.nonlinearities.sigmoid)
-
-        #network = lasagne.layers.BatchNormLayer(network)
-        #network = lasagne.layers.TransposedConv2DLayer(network, num_filters=num_units, filter_size=(4, 4), stride=(2, 2))
-
-        #network = lasagne.layers.TransposedConv2DLayer(network, num_filters=3, filter_size=(2, 2), stride=(2, 2),
-        #                                               nonlinearity=lambda x: x.clip(0., 1.))
-
+                                                       filter_size=(5, 5), stride=(2, 2), crop=2,
+                                                       nonlinearity=lasagne.nonlinearities.sigmoid, 
+                                                       output_size=32)
+        
         return network
 
     def build_discriminator(self, input_var=None):
@@ -94,16 +86,12 @@ class GAN(models.Model):
 
         network = lasagne.layers.Conv2DLayer(network, num_filters=num_units/4, filter_size=(5, 5),
                                              stride=2, pad=2, nonlinearity=lrelu)
-        network = lasagne.layers.BatchNormLayer(network)
 
-        network = lasagne.layers.Conv2DLayer(network, num_filters=num_units/2, filter_size=(5, 5),
-                                             stride=2, pad=2, nonlinearity=lrelu)
-        network = lasagne.layers.BatchNormLayer(network)
+        network = lasagne.layers.batch_norm(lasagne.layers.Conv2DLayer(network, num_filters=num_units/2, filter_size=(5, 5),
+                                             stride=2, pad=2, nonlinearity=lrelu))
 
-        network = lasagne.layers.Conv2DLayer(network, num_filters=num_units, filter_size=(5, 5),
-                                             stride=2, pad=2, nonlinearity=lrelu)
-        network = lasagne.layers.BatchNormLayer(network)
-
+        network = lasagne.layers.batch_norm(lasagne.layers.Conv2DLayer(network, num_filters=num_units, filter_size=(5, 5),
+                                             stride=2, pad=2, nonlinearity=lrelu))
 
         network = lasagne.layers.FlattenLayer(network)
         network = lasagne.layers.DenseLayer(network, 1,
@@ -191,22 +179,20 @@ class GAN(models.Model):
 
     def train(self, imgs, target, caps):
 
-        #TODO: train discriminator then generator
         noise_size = self.options['noise_size']
         noise = np.random.normal(size=(len(imgs), noise_size))
 
         use_wgan = self.options['use_wgan']
         
         [disc_loss] = self.train_discriminator_fn(noise, target)
-        [gen_loss] = self.train_generator_fn(noise, target)
+        gen_loss = self.train_generator_fn(noise, target)
 
         if use_wgan:
             discriminator_params_values=lasagne.layers.get_all_param_values(self.discriminator, trainable=True)
             clamped_weights= [np.clip(w, -0.05, 0.05) for  w in discriminator_params_values]
             lasagne.layers.set_all_param_values(self.discriminator, clamped_weights, trainable=True)
         
-        return gen_loss, disc_loss
-        #return [disc_loss, gen_loss]
+        return disc_loss, gen_loss
 
     def get_generation_fn(self):
         
@@ -214,18 +200,99 @@ class GAN(models.Model):
         
         def val_fn(imgs, target, caps):
             
-            #noise = np.random.normal(size=(len(imgs), noise_size))
             noise = np.random.uniform(size=(len(imgs), noise_size))
             res = self.generate_sample_fn(noise)
-
-            #from IPython.core.debugger import Tracer
-            #Tracer()()
-
-            #print res[1].shape
-            #print res[2].shape
             return 0, res[0]
 
         return val_fn
+    
+class GAN64(GAN):
+    
+    def build_generator(self, input_var=None):
+        num_units = self.options['generator_num_units']
+        encoder_size = self.options['generator_encoder_size']
+        noise_size = self.options['noise_size']
+
+        print "We have {} hidden units".format(num_units)
+
+        network = lasagne.layers.InputLayer(shape=(None, noise_size),
+                                            input_var=input_var)
+
+        network = lasagne.layers.ReshapeLayer(network, (-1, noise_size, 1, 1))
+        network = lasagne.layers.BatchNormLayer(network)
+        
+        network = lasagne.layers.TransposedConv2DLayer(network, num_filters=num_units, filter_size=(4, 4),
+                                                       stride=(1, 1))
+
+        network = lasagne.layers.BatchNormLayer(network)
+        network = lasagne.layers.TransposedConv2DLayer(network, num_filters=num_units/2,
+                                                       filter_size=(5, 5), stride=(2, 2), crop=2, output_size=8)
+
+        network = lasagne.layers.BatchNormLayer(network)
+        network = lasagne.layers.TransposedConv2DLayer(network, num_filters=num_units/4,
+                                                       filter_size=(5, 5), stride=(2, 2), crop=2, output_size=16)
+                
+        network = lasagne.layers.BatchNormLayer(network)
+        network = lasagne.layers.TransposedConv2DLayer(network, num_filters=num_units/8,
+                                                       filter_size=(5, 5), stride=(2, 2), crop=2, output_size=32)
+
+        network = lasagne.layers.TransposedConv2DLayer(network, num_filters=3,
+                                                       filter_size=(5, 5), stride=(2, 2), crop=2,
+                                                       nonlinearity=lasagne.nonlinearities.sigmoid, 
+                                                       output_size=64)
+        return network
+
+    def build_discriminator(self, input_var=None):
+        num_units = self.options['discriminator_num_units']
+        encoder_size = self.options['discriminator_encoder_size']
+        lrelu = lasagne.nonlinearities.LeakyRectify(0.2)
+
+        print "We have {} hidden units".format(num_units)
+
+        network = lasagne.layers.InputLayer(shape=(None, 3, 64, 64),
+                                            input_var=input_var)
+        
+        network = lasagne.layers.Conv2DLayer(network, num_filters=num_units/8, filter_size=(5, 5),
+                                             stride=2, pad=2, nonlinearity=lrelu)
+        network = lasagne.layers.BatchNormLayer(network)
+
+        network = lasagne.layers.Conv2DLayer(network, num_filters=num_units/4, filter_size=(5, 5),
+                                             stride=2, pad=2, nonlinearity=lrelu)
+        network = lasagne.layers.BatchNormLayer(network)
+
+        network = lasagne.layers.Conv2DLayer(network, num_filters=num_units/2, filter_size=(5, 5),
+                                             stride=2, pad=2, nonlinearity=lrelu)
+        network = lasagne.layers.BatchNormLayer(network)
+
+        network = lasagne.layers.Conv2DLayer(network, num_filters=num_units, filter_size=(5, 5),
+                                             stride=2, pad=2, nonlinearity=lrelu)
+        network = lasagne.layers.BatchNormLayer(network)
+
+
+        network = lasagne.layers.FlattenLayer(network)
+        network = lasagne.layers.DenseLayer(network, 1,
+                                             nonlinearity=lasagne.nonlinearities.sigmoid)
+
+        return network
+    
+    def train(self, imgs, target, caps):
+        
+        img_complete = utils.put_in_middle(imgs, target)
+
+        noise_size = self.options['noise_size']
+        noise = np.random.normal(size=(len(imgs), noise_size))
+
+        use_wgan = self.options['use_wgan']
+        
+        [disc_loss] = self.train_discriminator_fn(noise, img_complete)
+        gen_loss = self.train_generator_fn(noise, img_complete)
+
+        if use_wgan:
+            discriminator_params_values=lasagne.layers.get_all_param_values(self.discriminator, trainable=True)
+            clamped_weights= [np.clip(w, -0.05, 0.05) for  w in discriminator_params_values]
+            lasagne.layers.set_all_param_values(self.discriminator, clamped_weights, trainable=True)
+        
+        return gen_loss, disc_loss
     
 class BICGAN(GAN):
         #Under cosntruction
@@ -242,22 +309,18 @@ class BICGAN(GAN):
                                             input_var=contour)
         
         #encoder = lasagne.layers.BatchNormLayer(self._contour_input)
-        encoder = lasagne.layers.Conv2DLayer(self._contour_input, num_filters=num_units/8, filter_size=(5, 5),
-                                             stride=2, pad=2)
-        encoder = lasagne.layers.BatchNormLayer(encoder)
+        encoder = lasagne.layers.batch_norm(lasagne.layers.Conv2DLayer(self._contour_input, num_filters=num_units/8, filter_size=(5, 5),
+                                             stride=2, pad=2))
 
-        encoder = lasagne.layers.Conv2DLayer(encoder, num_filters=num_units/4, filter_size=(5, 5),
-                                             stride=2, pad=2)
-        encoder = lasagne.layers.BatchNormLayer(encoder)
+        encoder = lasagne.layers.batch_norm(lasagne.layers.Conv2DLayer(encoder, num_filters=num_units/4, filter_size=(5, 5),
+                                             stride=2, pad=2))
 
-        encoder = lasagne.layers.Conv2DLayer(encoder, num_filters=num_units/2, filter_size=(5, 5),
-                                             stride=2, pad=2)
+        encoder = lasagne.layers.batch_norm(lasagne.layers.Conv2DLayer(encoder, num_filters=num_units/2, filter_size=(5, 5),
+                                             stride=2, pad=2))
 
-        encoder = lasagne.layers.Conv2DLayer(encoder, num_filters=num_units, filter_size=(5, 5),
-                                             stride=2, pad=2)
-        encoder = lasagne.layers.BatchNormLayer(encoder)
+        encoder = lasagne.layers.batch_norm(lasagne.layers.Conv2DLayer(encoder, num_filters=num_units, filter_size=(5, 5),
+                                             stride=2, pad=2))
 
-        #encoder = lasagne.layers.BatchNormLayer(encoder)
         encoder = lasagne.layers.FlattenLayer(encoder)
         
 
@@ -268,21 +331,22 @@ class BICGAN(GAN):
         network = lasagne.layers.ConcatLayer([self._noise_input, encoder])
 
         network = lasagne.layers.ReshapeLayer(network, (-1, noise_size + num_units*4*4, 1, 1))
-        network = lasagne.layers.BatchNormLayer(network)
-        network = lasagne.layers.TransposedConv2DLayer(network, num_filters=num_units, filter_size=(4, 4),
-                                                       stride=(1, 1))
 
-        network = lasagne.layers.BatchNormLayer(network)
-        network = lasagne.layers.TransposedConv2DLayer(network, num_filters=num_units/2,
-                                                       filter_size=(5, 5), stride=(2, 2), crop=2, output_size=8)
+        network = lasagne.layers.batch_norm(
+            lasagne.layers.TransposedConv2DLayer(network, num_filters=num_units, filter_size=(4, 4),
+                                                 stride=(1, 1)))
 
-        network = lasagne.layers.BatchNormLayer(network)
-        network = lasagne.layers.TransposedConv2DLayer(network, num_filters=num_units/4,
-                                                       filter_size=(5, 5), stride=(2, 2), crop=2, output_size=16)
+        network = lasagne.layers.batch_norm(lasagne.layers.TransposedConv2DLayer(network, num_filters=num_units / 2,
+                                                                                 filter_size=(5, 5), stride=(2, 2),
+                                                                                 crop=2, output_size=8))
+
+        network = lasagne.layers.batch_norm(lasagne.layers.TransposedConv2DLayer(network, num_filters=num_units / 4,
+                                                                                 filter_size=(5, 5), stride=(2, 2),
+                                                                                 crop=2, output_size=16))
 
         network = lasagne.layers.TransposedConv2DLayer(network, num_filters=3,
                                                        filter_size=(5, 5), stride=(2, 2), crop=2,
-                                                       nonlinearity=lasagne.nonlinearities.sigmoid, 
+                                                       nonlinearity=lasagne.nonlinearities.sigmoid,
                                                        output_size=32)
 
 
@@ -302,24 +366,18 @@ class BICGAN(GAN):
         
         network = lasagne.layers.Conv2DLayer(network, num_filters=num_units/16, filter_size=(5, 5),
                                              stride=2, pad=2, nonlinearity=lrelu)
-        network = lasagne.layers.BatchNormLayer(network)
 
-        network = lasagne.layers.Conv2DLayer(network, num_filters=num_units/8, filter_size=(5, 5),
-                                             stride=2, pad=2, nonlinearity=lrelu)
-        network = lasagne.layers.BatchNormLayer(network)
+        network = lasagne.layers.batch_norm(lasagne.layers.Conv2DLayer(network, num_filters=num_units/8, filter_size=(5, 5),
+                                             stride=2, pad=2, nonlinearity=lrelu))
 
-        network = lasagne.layers.Conv2DLayer(network, num_filters=num_units/4, filter_size=(5, 5),
-                                             stride=2, pad=2, nonlinearity=lrelu)
-        network = lasagne.layers.BatchNormLayer(network)
+        network = lasagne.layers.batch_norm(lasagne.layers.Conv2DLayer(network, num_filters=num_units/4, filter_size=(5, 5),
+                                             stride=2, pad=2, nonlinearity=lrelu))
 
-        network = lasagne.layers.Conv2DLayer(network, num_filters=num_units/2, filter_size=(5, 5),
-                                             stride=2, pad=2, nonlinearity=lrelu)
-        network = lasagne.layers.BatchNormLayer(network)
+        network = lasagne.layers.batch_norm(lasagne.layers.Conv2DLayer(network, num_filters=num_units/2, filter_size=(5, 5),
+                                             stride=2, pad=2, nonlinearity=lrelu))
 
-        network = lasagne.layers.Conv2DLayer(network, num_filters=num_units, filter_size=(5, 5),
-                                             stride=2, pad=2, nonlinearity=lrelu)
-        network = lasagne.layers.BatchNormLayer(network)
-
+        network = lasagne.layers.batch_norm(lasagne.layers.Conv2DLayer(network, num_filters=num_units, filter_size=(5, 5),
+                                             stride=2, pad=2, nonlinearity=lrelu))
 
         network = lasagne.layers.FlattenLayer(network)
         network = lasagne.layers.DenseLayer(network, 1,

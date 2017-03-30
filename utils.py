@@ -8,25 +8,31 @@ import theano
 from theano import tensor as T
 import pickle as pkl
 
+def put_in_middle(img, middle):
+    
+    center = (int(np.floor(img.shape[1] / 2.)), int(np.floor(img.shape[2] / 2.)))
+    img = np.copy(img)
+    img[:, center[0] - 16:center[0] + 16, center[1] - 16:center[1] + 16, :] = middle
+    return img
 
-def generate_and_show_sample(fn, nb=1, seed=1993, it=None, verbose=True, n_split=1):
+def generate_and_show_sample(fn, nb=1, seed=1993, it=None, verbose=True, n_split=1, return_64_64=False):
 
     if it is None:
-        it = Iterator(img_path="val2014", load_caption=True, process_text=True)
+        it = Iterator(img_path="val2014", load_caption=False, process_text=True)
 
     choice = range(len(it))
     if seed > 0:
         np.random.seed(seed)
         np.random.shuffle(choice)
 
-    choice = choice[:nb]
+    choice = choice[:nb] * 5
 
     #try:
     xs, ys, cs = zip(*[it[i] for i in choice])
     loss, preds = fn(xs, ys, cs)
 
     for pl in np.array_split(np.arange(nb), n_split):
-            show_sample([xs[i] for i in pl], [ys[i] for i in pl], [preds[i] for i in pl], len(pl))
+            show_sample([xs[i] for i in pl], [ys[i] for i in pl], [preds[i] for i in pl], len(pl), return_64_64=return_64_64)
     #except Exception as e:
     #    print e
     #    print "Oups!"
@@ -64,7 +70,7 @@ def get_theano_generative_func(network_path, network_fn):
     val_fn = theano.function([input, target], [test_loss, test_prediction.transpose((0, 2, 3, 1))])
     return val_fn
 
-def show_sample(xs, ys, preds, nb=1):
+def show_sample(xs, ys, preds, nb=1, return_64_64=False):
 
     for i in range(nb):
         img_true = np.copy(xs[i])
@@ -74,12 +80,17 @@ def show_sample(xs, ys, preds, nb=1):
 
         plt.subplot(2, nb, i+1)
         plt.imshow(img_true)
-
-        img_pred = np.copy(xs[i])
-        img_pred[center[0] - 16:center[0] + 16, center[1] - 16:center[1] + 16, :] = preds[i]
-        plt.subplot(2, nb, nb+i+1)
-        plt.imshow(img_pred)
-
+        
+        if not return_64_64:
+            img_pred = np.copy(xs[i])
+            img_pred[center[0] - 16:center[0] + 16, center[1] - 16:center[1] + 16, :] = preds[i]
+            plt.subplot(2, nb, nb+i+1)
+            plt.imshow(img_pred)
+        else:
+            plt.subplot(2, nb, nb+i+1)
+            plt.imshow(preds[i])
+            
+            
     plt.show()
 
 
