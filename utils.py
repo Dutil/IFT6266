@@ -1,12 +1,15 @@
 
 
 from iterator import Iterator
+import matplotlib
+matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 import numpy as np
 import lasagne
 import theano
 from theano import tensor as T
 import pickle as pkl
+import os
 
 def put_in_middle(img, middle):
     
@@ -15,7 +18,15 @@ def put_in_middle(img, middle):
     img[:, center[0] - 16:center[0] + 16, center[1] - 16:center[1] + 16, :] = middle
     return img
 
-def generate_and_show_sample(fn, nb=1, seed=1993, it=None, verbose=True, n_split=1, return_64_64=False):
+def put_in_middle_theano(img, middle):
+    center = (img.shape[2] / 2, img.shape[3] / 2)
+
+    img = T.set_subtensor(img[:, :, center[0] - 16:center[0] + 16, center[1] - 16:center[1] + 16],
+                              middle)
+
+    return img
+
+def generate_and_show_sample(fn, nb=1, seed=1993, it=None, verbose=True, n_split=1, return_64_64=False, replace_middle=False):
 
     if it is None:
         it = Iterator(img_path="val2014", load_caption=False, process_text=True)
@@ -31,20 +42,27 @@ def generate_and_show_sample(fn, nb=1, seed=1993, it=None, verbose=True, n_split
     xs, ys, cs = zip(*[it[i] for i in choice])
     loss, preds = fn(xs, ys, cs)
 
+    figs = []
+
     for pl in np.array_split(np.arange(nb), n_split):
-            show_sample([xs[i] for i in pl], [ys[i] for i in pl], [preds[i] for i in pl], len(pl), return_64_64=return_64_64)
+            figs.append(show_sample([xs[i] for i in pl], [ys[i] for i in pl], [preds[i] for i in pl], len(pl),
+                        return_64_64=return_64_64, replace_middle=replace_middle))
     #except Exception as e:
     #    print e
     #    print "Oups!"
+
+    caps = []
 
     try:
         if verbose and it.mapping is not None:
             for img in cs:
                 sentence = [it.mapping[idx] for idx in img[0]]
-                print ' '.join(sentence)
-                print ""
+                caps.append(' '.join(sentence))
+
     except AttributeError:
         pass
+
+    return figs, caps
 
 def get_theano_generative_func(network_path, network_fn):
 
@@ -70,7 +88,12 @@ def get_theano_generative_func(network_path, network_fn):
     val_fn = theano.function([input, target], [test_loss, test_prediction.transpose((0, 2, 3, 1))])
     return val_fn
 
-def show_sample(xs, ys, preds, nb=1, return_64_64=False):
+def show_sample(xs, ys, preds, nb=1, return_64_64=False, replace_middle=False):
+
+    fig = plt.figure()
+    gcf = plt.gcf()
+    gcf.set_size_inches(18, 15)
+    fig.set_canvas(gcf.canvas)
 
     for i in range(nb):
         img_true = np.copy(xs[i])
@@ -78,20 +101,38 @@ def show_sample(xs, ys, preds, nb=1, return_64_64=False):
 
         img_true[center[0] - 16:center[0] + 16, center[1] - 16:center[1] + 16, :] = ys[i]
 
-        plt.subplot(2, nb, i+1)
-        plt.imshow(img_true)
-        
+        ax = fig.add_subplot(2, nb, i+1)
+        ax.imshow(img_true)
+
+
+        # plt.imshow(img_true)
+        #fig.subplot(2, nb, i+1)
+
         if not return_64_64:
             img_pred = np.copy(xs[i])
+            #print preds[i].shape
             img_pred[center[0] - 16:center[0] + 16, center[1] - 16:center[1] + 16, :] = preds[i]
-            plt.subplot(2, nb, nb+i+1)
-            plt.imshow(img_pred)
+
+            ax = fig.add_subplot(2, nb, nb+i+1)
+            ax.imshow(img_pred)
+
+            #fig.subplot(2, nb, nb+i+1)
+            #fig.imshow(img_pred)
         else:
-            plt.subplot(2, nb, nb+i+1)
-            plt.imshow(preds[i])
             
+            if replace_middle == False:
+                ax = fig.add_subplot(2, nb, nb+i+1)
+                ax.imshow(preds[i])
+            else:
+                img_pred = np.copy(xs[i])
+                img_pred[center[0] - 16:center[0] + 16, center[1] - 16:center[1] + 16, :] = preds[i][center[0] - 16:center[0] + 16, center[1] - 16:center[1] + 16, :]
+                
+                ax = fig.add_subplot(2, nb, nb+i+1)
+                ax.imshow(img_pred)
+            #fig.subplot(2, nb, nb+i+1)
+            #fig.imshow(preds[i])
             
-    plt.show()
+    return fig
 
 
 

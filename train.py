@@ -127,22 +127,22 @@ if __name__ == '__main__':
     #                    return_64_64 = True,
     #                   )
     #
-    num_units = 128
+    num_units = 512
 
     my_model = train(GAN.CapGAN, lr=0.0002, num_epochs=100, sample=10,
                            save_freq=600, verbose_freq=1000, batch_size=128, reload=False,
-                           model_dir="models/CapGAN/",
+                           model_dir="models/CapGAN_RNN_512_l2_20/",
                            generator_num_units=num_units,
                            load_caption=True,
                            generator_encoder_size=num_units,
                            discriminator_num_units=num_units,
                            discriminator_encoder_size=num_units,
                            num_units=num_units,
-                           emb_size=100, vocab_size=7574, rnn_size=num_units, use_bag_of_word=True,
-                           emb_file=None,
-                           #emb_file="glove.6B/glove.6B.100d.txt",
+                           emb_size=100, vocab_size=7574, rnn_size=num_units, use_bag_of_word=False,
+                           #emb_file=None,
+                           emb_file="glove.6B/glove.6B.100d.txt",
                            noise_size=5, use_wgan=False,
-                           l2_penalty=60, gan_penalty=0.1,
+                           l2_penalty=20, gan_penalty=0.1,
                            return_64_64=True,
                            show_imgs=True
                            )

@@ -35,6 +35,7 @@ class Iterator(object):
             self.caption_dict = pkl.load(fd)
             print "Done"
 
+        print self.caption_dict.keys()[0]
         self.vocab, self.mapping = text_utils.get_vocab(self.caption_dict, remove_stop_words=False)
         print "We have a vocabulary of size", len(self.vocab)
 
@@ -46,7 +47,8 @@ class Iterator(object):
         print "Done"
 
     def process_captions(self):
-            self.processed_data = text_utils.filter_caps(self.caption_dict, self.mapping, switch=True)
+        print "Processing the captions"
+        self.processed_data = text_utils.filter_caps(self.caption_dict, self.mapping, switch=True)
 
     def _get_img(self, i):
 
@@ -70,11 +72,13 @@ class Iterator(object):
 
         cap = None
         if self.load_caption:
-            cap = self._get_caption()
+            cap = self._get_caption(cap_id)
+
+
 
         return input.astype('float32')/255., target.astype('float32')/255., cap
 
-    def _get_caption(self):
+    def _get_caption(self, cap_id):
         if self.process_text:
             cap = self.processed_data[cap_id]
         else:

@@ -62,7 +62,7 @@ def filter_caps(data, mapping, switch=False):
     """
 
     data_filtered = {}
-    for img_name in data:
+    for i, img_name in enumerate(data):
         tmp = []
         for cap in data[img_name]:
             words = steam(cap)
@@ -72,6 +72,7 @@ def filter_caps(data, mapping, switch=False):
                 filtered = [word if word in mapping else "--UNK--" for word in words]
 
             tmp.append(filtered)
+
         data_filtered[img_name] = tmp
 
     return data_filtered
